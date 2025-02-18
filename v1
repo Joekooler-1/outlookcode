@@ -23,7 +23,7 @@ Sub CreateYearlyFolderStructure()
     
     Set ns = Application.Session
     
-    ' Prompt the user to select the target inbox (this could be your primary inbox or a shared mailbox)
+    ' Prompt the user to select the target inbox
     Set TargetInbox = ns.PickFolder
     If TargetInbox Is Nothing Then
         MsgBox "No folder selected. Exiting.", vbExclamation
@@ -86,18 +86,23 @@ Sub CreateYearlyFolderStructure()
                 
                 ' If this is the last business day, add the subfolders
                 If CurrentDate = LastBusinessDay Then
-                    ' Use the already created DayFolder as the last business day folder
+                    ' Use the already created day folder as the last business day folder
                     Set LastBusinessDayFolder = DayFolder
                     For j = LBound(SubFolderNames) To UBound(SubFolderNames)
                         On Error Resume Next
                         Set SubFolder = LastBusinessDayFolder.Folders(SubFolderNames(j))
                         On Error GoTo 0
                         If SubFolder Is Nothing Then
+                            On Error Resume Next
                             Set SubFolder = LastBusinessDayFolder.Folders.Add(SubFolderNames(j), olFolder)
-                            If SubFolder Is Nothing Then
-                                MsgBox "Error: Could not create subfolder: " & SubFolderNames(j) & " in folder " & LastBusinessDayFolder.Name, vbCritical
+                            If Err.Number <> 0 Then
+                                MsgBox "Error " & Err.Number & ": " & Err.Description & vbCrLf & _
+                                    "While adding subfolder: " & SubFolderNames(j) & " in folder " & LastBusinessDayFolder.Name, vbCritical
+                                Err.Clear
+                                On Error GoTo 0
                                 Exit Sub
                             End If
+                            On Error GoTo 0
                         End If
                     Next j
                 End If
