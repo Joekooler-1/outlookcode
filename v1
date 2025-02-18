@@ -1,50 +1,53 @@
 Option Explicit
 
+' Helper function: Returns an existing subfolder or creates it if it doesn't exist.
+Function GetOrCreateFolder(ByVal ParentFolder As Outlook.MAPIFolder, FolderName As String) As Outlook.MAPIFolder
+    Dim f As Outlook.MAPIFolder
+    On Error Resume Next
+    Set f = ParentFolder.Folders(FolderName)
+    On Error GoTo 0
+    If f Is Nothing Then
+        Set f = ParentFolder.Folders.Add(FolderName)
+    End If
+    Set GetOrCreateFolder = f
+End Function
+
 Sub CreateYearlyFolderStructure()
     Dim ns As Outlook.NameSpace
-    Dim TargetInbox As Outlook.MAPIFolder
-    Dim ArchiveFolder As Outlook.MAPIFolder
-    Dim ParentFolder As Outlook.MAPIFolder
-    Dim MonthFolder As Outlook.MAPIFolder
-    Dim DayFolder As Outlook.MAPIFolder
-    Dim LastBusinessDayFolder As Outlook.MAPIFolder
+    Dim TargetInbox As Outlook.MAPIFolder, ArchiveFolder As Outlook.MAPIFolder, ParentFolder As Outlook.MAPIFolder
+    Dim MonthFolder As Outlook.MAPIFolder, DayFolder As Outlook.MAPIFolder, LastBusinessDayFolder As Outlook.MAPIFolder
     Dim SubFolder As Outlook.MAPIFolder
-    Dim i As Integer
+    Dim i As Integer, j As Integer
     Dim StartDate As Date, EndDate As Date, CurrentDate As Date, LastBusinessDay As Date
-    Dim MonthStr As String, DayStr As String
-    Dim FolderName As String
+    Dim MonthStr As String, DayStr As String, FolderName As String
     Dim SubFolderNames As Variant
-    Dim j As Integer
-
-    ' List of subfolders to add inside the last business day folder
+    
+    ' List of subfolders to add on the last business day
     SubFolderNames = Array("0 FX London", "1 FX Toronto", "2 GEDA GELP", "3 FX Options", _
                            "4 Structured Credit", "5 Structured Rates", "6 Bonds", _
                            "7 Commodities", "8 London IRS", "9 Toronto IRS", "9.1 CDS")
     
     Set ns = Application.Session
     
-    ' Prompt the user to select the target inbox (this could be your primary inbox or a shared mailbox)
+    ' Prompt the user to select the target inbox
     Set TargetInbox = ns.PickFolder
     If TargetInbox Is Nothing Then
         MsgBox "No folder selected. Exiting.", vbExclamation
         Exit Sub
     End If
     
-    ' Locate "Archive - Valuation Reports" within the selected inbox
-    On Error Resume Next
-    Set ArchiveFolder = TargetInbox.Folders("Archive - Valuation Reports")
-    On Error GoTo 0
+    ' Locate (or create) "Archive - Valuation Reports" within the selected inbox
+    Set ArchiveFolder = GetOrCreateFolder(TargetInbox, "Archive - Valuation Reports")
     If ArchiveFolder Is Nothing Then
-        MsgBox "The folder 'Archive - Valuation Reports' was not found inside " & TargetInbox.Name & ".", vbExclamation
+        MsgBox "Unable to locate or create 'Archive - Valuation Reports' folder.", vbExclamation
         Exit Sub
     End If
     
-    ' Locate or create the "2025" folder inside "Archive - Valuation Reports"
-    On Error Resume Next
-    Set ParentFolder = ArchiveFolder.Folders("2025")
-    On Error GoTo 0
+    ' Locate (or create) the "2025" folder inside "Archive - Valuation Reports"
+    Set ParentFolder = GetOrCreateFolder(ArchiveFolder, "2025")
     If ParentFolder Is Nothing Then
-        Set ParentFolder = ArchiveFolder.Folders.Add("2025")
+        MsgBox "Unable to locate or create '2025' folder.", vbExclamation
+        Exit Sub
     End If
     
     ' Loop through each month (January to December)
@@ -52,13 +55,8 @@ Sub CreateYearlyFolderStructure()
         MonthStr = Format(i, "00")
         FolderName = "2025." & MonthStr
         
-        ' Locate or create the month folder under "2025"
-        On Error Resume Next
-        Set MonthFolder = ParentFolder.Folders(FolderName)
-        On Error GoTo 0
-        If MonthFolder Is Nothing Then
-            Set MonthFolder = ParentFolder.Folders.Add(FolderName)
-        End If
+        ' Get or create the month folder under "2025"
+        Set MonthFolder = GetOrCreateFolder(ParentFolder, FolderName)
         
         ' Set start and end dates for the month
         StartDate = DateSerial(2025, i, 1)
@@ -76,34 +74,14 @@ Sub CreateYearlyFolderStructure()
             If Weekday(CurrentDate, vbMonday) <= 5 Then
                 DayStr = "2025." & MonthStr & "." & Format(Day(CurrentDate), "00")
                 
-                ' Locate or create the day folder under the month folder
-                On Error Resume Next
-                Set DayFolder = MonthFolder.Folders(DayStr)
-                On Error GoTo 0
-                If DayFolder Is Nothing Then
-                    Set DayFolder = MonthFolder.Folders.Add(DayStr)
-                End If
+                ' Get or create the day folder under the month folder
+                Set DayFolder = GetOrCreateFolder(MonthFolder, DayStr)
                 
                 ' If this day is the last business day, add the subfolders
                 If CurrentDate = LastBusinessDay Then
-                    ' Use the already created day folder as the last business day folder
                     Set LastBusinessDayFolder = DayFolder
                     For j = LBound(SubFolderNames) To UBound(SubFolderNames)
-                        On Error Resume Next
-                        Set SubFolder = LastBusinessDayFolder.Folders(SubFolderNames(j))
-                        On Error GoTo 0
-                        If SubFolder Is Nothing Then
-                            On Error Resume Next
-                            Set SubFolder = LastBusinessDayFolder.Folders.Add(SubFolderNames(j))
-                            If Err.Number <> 0 Then
-                                MsgBox "Error " & Err.Number & ": " & Err.Description & vbCrLf & _
-                                    "While adding subfolder: " & SubFolderNames(j) & " in folder " & LastBusinessDayFolder.Name, vbCritical
-                                Err.Clear
-                                On Error GoTo 0
-                                Exit Sub
-                            End If
-                            On Error GoTo 0
-                        End If
+                        Set SubFolder = GetOrCreateFolder(LastBusinessDayFolder, SubFolderNames(j))
                     Next j
                 End If
             End If
