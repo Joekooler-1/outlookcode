@@ -1,0 +1,202 @@
+Option Explicit
+
+'********************************************************************
+' Excel VBA Macro to Count Emails by Subject Group from Outlook, 
+' Ignoring the Last Day Folder.
+'
+' This macro connects to Outlook (using late binding), prompts you to 
+' select a month folder (which should contain day folders named "YYYY.MM.DD"),
+' then scans each day folder (except the one with the maximum date) for emails.
+'
+' It counts emails into 11 groups based on subject line criteria:
+'
+' Group 1: LFX
+'     - Subject contains "LFX" OR "RBCBK_BLK_DERIV"
+'
+' Group 2: TFX
+'     - Subject contains "TFX"
+'
+' Group 3: GEDA
+'     - Subject contains any of: "ELN", "All_EQD", "_Structured Deposits", 
+'       "Delta 1", "Delta_One", "_Global_One", "_Variance_Swap", "Structured Equity Note"
+'
+' Group 4: FXO
+'     - Subject contains "FXO"
+'
+' Group 5: SR CREDIT
+'     - Subject contains "NOTES DAILY Kepler" OR "DAILY Pictet"
+'
+' Group 6: NOTES
+'     - Subject contains ": NOTES "
+'
+' Group 7: BONDS
+'     - Subject contains "_Bonds"
+'
+' Group 8: CDS
+'     - Subject contains "_CDS"
+'
+' Group 9: COMMODS
+'     - Subject contains any of: " _COMMODITIES", "_COMMODITY", " - MTM REPORT"
+'
+' Group 10: LRS
+'     - Subject contains "IRS"
+'
+' Group 11: TIRS
+'     - Subject contains "Tor_IRS"
+'
+' Emails that do not match any group are listed on the "Not Counted" worksheet.
+'
+' The macro outputs the results into a new Excel workbook with two worksheets:
+'
+'   "Summary" - Column A: Day folder name (date), Columns B-L: counts for each group.
+'   "Not Counted" - Lists each email (its subject) that did not match any criteria along
+'                   with the folder it was found in.
+'
+' The last day folder (the one with the maximum date) is ignored.
+'
+'********************************************************************
+
+Sub CountEmailsBySubjectGroup_Excel()
+    Dim olApp As Object ' Outlook.Application
+    Dim ns As Object ' Outlook.Namespace
+    Dim MonthFolder As Object ' Outlook.MAPIFolder
+    Dim DayFolder As Object ' Outlook.MAPIFolder
+    Dim item As Object
+    Dim subject As String
+    Dim groupNames As Variant
+    Dim groupCriteria As Variant
+    Dim counts() As Long
+    Dim i As Integer, j As Integer
+    Dim xlApp As Excel.Application, xlWb As Excel.Workbook
+    Dim xlWsSummary As Excel.Worksheet, xlWsNotCounted As Excel.Worksheet
+    Dim rowIndex As Long, notCountedRow As Long
+    Dim folderName As String
+    Dim matched As Boolean
+    Dim maxDate As Date, folderDate As Date, tempDate As Date
+    
+    ' Define group names (11 groups)
+    groupNames = Array("LFX", "TFX", "GEDA", "FXO", "SR CREDIT", "NOTES", "BONDS", "CDS", "COMMODS", "LRS", "TIRS")
+    
+    ' Define group criteria as an array of arrays.
+    groupCriteria = Array( _
+        Array("LFX", "RBCBK_BLK_DERIV"), _                                        ' Group 1: LFX
+        Array("TFX"), _                                                         ' Group 2: TFX
+        Array("ELN", "All_EQD", "_Structured Deposits", "Delta 1", "Delta_One", "_Global_One", "_Variance_Swap", "Structured Equity Note"), _  ' Group 3: GEDA
+        Array("FXO"), _                                                         ' Group 4: FXO
+        Array("NOTES DAILY Kepler", "DAILY Pictet"), _                           ' Group 5: SR CREDIT
+        Array(": NOTES "), _                                                    ' Group 6: NOTES
+        Array("_Bonds"), _                                                      ' Group 7: BONDS
+        Array("_CDS"), _                                                        ' Group 8: CDS
+        Array(" _COMMODITIES", "_COMMODITY", " - MTM REPORT"), _                  ' Group 9: COMMODS
+        Array("IRS"), _                                                         ' Group 10: LRS
+        Array("Tor_IRS")                                                        ' Group 11: TIRS
+    )
+    
+    ' There are 11 groups. Resize counts array accordingly.
+    ReDim counts(0 To 10)
+    
+    ' Create an Outlook application instance (late binding)
+    On Error Resume Next
+    Set olApp = GetObject(, "Outlook.Application")
+    If olApp Is Nothing Then
+        Set olApp = CreateObject("Outlook.Application")
+    End If
+    On Error GoTo 0
+    Set ns = olApp.GetNamespace("MAPI")
+    
+    ' Prompt user to select the Month folder (should contain day folders in the format "YYYY.MM.DD")
+    Set MonthFolder = ns.PickFolder
+    If MonthFolder Is Nothing Then
+        MsgBox "No folder selected. Exiting.", vbExclamation
+        Exit Sub
+    End If
+    
+    ' First, loop through the subfolders to determine the maximum date (the last day folder)
+    maxDate = 0
+    For Each DayFolder In MonthFolder.Folders
+        folderName = DayFolder.Name
+        If Len(folderName) = 10 Then
+            On Error Resume Next
+            tempDate = CDate(Replace(folderName, ".", "/"))
+            On Error GoTo 0
+            If tempDate > maxDate Then
+                maxDate = tempDate
+            End If
+        End If
+    Next DayFolder
+    
+    ' Create a new Excel workbook for output (this code runs in Excel)
+    Set xlApp = Application
+    Set xlWb = xlApp.Workbooks.Add
+    
+    ' Create the Summary worksheet
+    Set xlWsSummary = xlWb.Worksheets(1)
+    xlWsSummary.Name = "Summary"
+    xlWsSummary.Cells(1, 1).Value = "Date"
+    For i = 0 To UBound(groupNames)
+        xlWsSummary.Cells(1, i + 2).Value = groupNames(i)
+    Next i
+    rowIndex = 2 ' start writing data from row 2 in Summary sheet
+    
+    ' Create the Not Counted worksheet
+    Set xlWsNotCounted = xlWb.Worksheets.Add(After:=xlWb.Worksheets(xlWb.Worksheets.Count))
+    xlWsNotCounted.Name = "Not Counted"
+    xlWsNotCounted.Cells(1, 1).Value = "Folder"
+    xlWsNotCounted.Cells(1, 2).Value = "Subject"
+    notCountedRow = 2
+    
+    ' Loop through each subfolder in the selected Month folder
+    For Each DayFolder In MonthFolder.Folders
+        folderName = DayFolder.Name
+        If Len(folderName) = 10 Then
+            ' Convert folderName to a date
+            On Error Resume Next
+            folderDate = CDate(Replace(folderName, ".", "/"))
+            On Error GoTo 0
+            
+            ' Skip this folder if it is the last day folder
+            If folderDate = maxDate Then GoTo NextDayFolder
+            
+            ' Initialize counts for each group
+            For i = 0 To UBound(groupNames)
+                counts(i) = 0
+            Next i
+            
+            ' Loop through each item in the day folder
+            For Each item In DayFolder.Items
+                ' Process only Mail Items (olMail = 43)
+                If item.Class = 43 Then
+                    subject = item.Subject
+                    Dim emailCounted As Boolean
+                    emailCounted = False
+                    ' Check subject against each group criteria
+                    For i = 0 To UBound(groupNames)
+                        For j = LBound(groupCriteria(i)) To UBound(groupCriteria(i))
+                            If InStr(1, subject, groupCriteria(i)(j), vbTextCompare) > 0 Then
+                                counts(i) = counts(i) + 1
+                                emailCounted = True
+                                Exit For
+                            End If
+                        Next j
+                    Next i
+                    ' If email did not match any group, record it on the Not Counted sheet
+                    If Not emailCounted Then
+                        xlWsNotCounted.Cells(notCountedRow, 1).Value = folderName
+                        xlWsNotCounted.Cells(notCountedRow, 2).Value = subject
+                        notCountedRow = notCountedRow + 1
+                    End If
+                End If
+            Next item
+            
+            ' Write the day (folder name) and counts to the Summary sheet
+            xlWsSummary.Cells(rowIndex, 1).Value = folderName
+            For i = 0 To UBound(groupNames)
+                xlWsSummary.Cells(rowIndex, i + 2).Value = counts(i)
+            Next i
+            rowIndex = rowIndex + 1
+        End If
+NextDayFolder:
+    Next DayFolder
+    
+    MsgBox "Email counts by subject group (excluding the last day folder) have been output to Excel.", vbInformation
+End Sub
