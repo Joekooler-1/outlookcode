@@ -23,7 +23,7 @@ Sub CreateYearlyFolderStructure()
     
     Set ns = Application.Session
     
-    ' Prompt the user to select the target inbox (this could be your primary inbox or a shared mailbox)
+    ' Prompt the user to select the target inbox
     Set TargetInbox = ns.PickFolder
     If TargetInbox Is Nothing Then
         MsgBox "No folder selected. Exiting.", vbExclamation
@@ -47,7 +47,7 @@ Sub CreateYearlyFolderStructure()
         Set ParentFolder = ArchiveFolder.Folders.Add("2025", olFolder)
     End If
     
-    ' Loop through all months (January to December)
+    ' Loop through each month (January to December)
     For i = 1 To 12
         MonthStr = Format(i, "00")
         FolderName = "2025." & MonthStr
@@ -84,14 +84,10 @@ Sub CreateYearlyFolderStructure()
                     Set DayFolder = MonthFolder.Folders.Add(DayStr, olFolder)
                 End If
                 
-                ' If this is the last business day, ensure the subfolders are created
+                ' If this day is the last business day, add the subfolders
                 If CurrentDate = LastBusinessDay Then
-                    On Error Resume Next
-                    Set LastBusinessDayFolder = MonthFolder.Folders(DayStr)
-                    On Error GoTo 0
-                    If LastBusinessDayFolder Is Nothing Then
-                        Set LastBusinessDayFolder = MonthFolder.Folders.Add(DayStr, olFolder)
-                    End If
+                    ' Use the already created DayFolder as the last business day folder
+                    Set LastBusinessDayFolder = DayFolder
                     For j = LBound(SubFolderNames) To UBound(SubFolderNames)
                         On Error Resume Next
                         Set SubFolder = LastBusinessDayFolder.Folders(SubFolderNames(j))
