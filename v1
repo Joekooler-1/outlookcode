@@ -23,7 +23,7 @@ Sub CreateYearlyFolderStructure()
     
     Set ns = Application.Session
     
-    ' Prompt the user to select the target inbox
+    ' Prompt the user to select the target inbox (this could be your primary inbox or a shared mailbox)
     Set TargetInbox = ns.PickFolder
     If TargetInbox Is Nothing Then
         MsgBox "No folder selected. Exiting.", vbExclamation
@@ -84,7 +84,7 @@ Sub CreateYearlyFolderStructure()
                     Set DayFolder = MonthFolder.Folders.Add(DayStr, olFolder)
                 End If
                 
-                ' If this day is the last business day, add the subfolders
+                ' If this is the last business day, add the subfolders
                 If CurrentDate = LastBusinessDay Then
                     ' Use the already created DayFolder as the last business day folder
                     Set LastBusinessDayFolder = DayFolder
@@ -94,6 +94,10 @@ Sub CreateYearlyFolderStructure()
                         On Error GoTo 0
                         If SubFolder Is Nothing Then
                             Set SubFolder = LastBusinessDayFolder.Folders.Add(SubFolderNames(j), olFolder)
+                            If SubFolder Is Nothing Then
+                                MsgBox "Error: Could not create subfolder: " & SubFolderNames(j) & " in folder " & LastBusinessDayFolder.Name, vbCritical
+                                Exit Sub
+                            End If
                         End If
                     Next j
                 End If
