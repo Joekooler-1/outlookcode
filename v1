@@ -1,5 +1,23 @@
 Option Explicit
 
+'********************************************************************
+' Steps to Use:
+' 1. Open Outlook.
+' 2. Press ALT+F11 to open the VBA Editor.
+' 3. Insert a new module (Click "Insert" -> "Module").
+' 4. Copy and paste the entire code below into the module.
+' 5. Press ALT+F8, select "CreateYearlyFolderStructure", and click "Run".
+' 6. When prompted, enter the desired year (e.g., 2026) in the input box.
+' 7. Next, select the target inbox that contains your "Archive - Valuation Reports" folder.
+' 8. The script will automatically create the folder structure for the specified year:
+'      - A folder for that year (e.g., "2026") under "Archive - Valuation Reports".
+'      - Month folders (e.g., "2026.01", "2026.02", ..., "2026.12") inside the year folder.
+'      - Day folders for each business day (Monday-Friday) in each month, formatted as "YYYY.MM.DD".
+'      - On the last business day of each month, additional subfolders (e.g., "0 FX London", "1 FX Toronto", etc.)
+'        are created inside that day folder.
+' 9. A message box will confirm once the folders are created successfully.
+'********************************************************************
+
 ' Helper function: Returns an existing subfolder or creates it if it doesn't exist.
 Function GetOrCreateFolder(ParentFolder As Outlook.MAPIFolder, FolderName As String) As Outlook.MAPIFolder
     Dim f As Outlook.MAPIFolder
