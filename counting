@@ -1,61 +1,3 @@
-Option Explicit
-
-'********************************************************************
-' Excel VBA Macro to Count Emails by Subject Group from Outlook, 
-' Ignoring the Last Day Folder.
-'
-' This macro connects to Outlook (using late binding), prompts you to 
-' select a month folder (which should contain day folders named "YYYY.MM.DD"),
-' then scans each day folder (except the one with the maximum date) for emails.
-'
-' It counts emails into 11 groups based on subject line criteria:
-'
-' Group 1: LFX
-'     - Subject contains "LFX" OR "RBCBK_BLK_DERIV"
-'
-' Group 2: TFX
-'     - Subject contains "TFX"
-'
-' Group 3: GEDA
-'     - Subject contains any of: "ELN", "All_EQD", "_Structured Deposits", 
-'       "Delta 1", "Delta_One", "_Global_One", "_Variance_Swap", "Structured Equity Note"
-'
-' Group 4: FXO
-'     - Subject contains "FXO"
-'
-' Group 5: SR CREDIT
-'     - Subject contains "NOTES DAILY Kepler" OR "DAILY Pictet"
-'
-' Group 6: NOTES
-'     - Subject contains ": NOTES "
-'
-' Group 7: BONDS
-'     - Subject contains "_Bonds"
-'
-' Group 8: CDS
-'     - Subject contains "_CDS"
-'
-' Group 9: COMMODS
-'     - Subject contains any of: " _COMMODITIES", "_COMMODITY", " - MTM REPORT"
-'
-' Group 10: LRS
-'     - Subject contains "IRS"
-'
-' Group 11: TIRS
-'     - Subject contains "Tor_IRS"
-'
-' Emails that do not match any group are listed on the "Not Counted" worksheet.
-'
-' The macro outputs the results into a new Excel workbook with two worksheets:
-'
-'   "Summary" - Column A: Day folder name (date), Columns B-L: counts for each group.
-'   "Not Counted" - Lists each email (its subject) that did not match any criteria along
-'                   with the folder it was found in.
-'
-' The last day folder (the one with the maximum date) is ignored.
-'
-'********************************************************************
-
 Sub CountEmailsBySubjectGroup_Excel()
     Dim olApp As Object ' Outlook.Application
     Dim ns As Object ' Outlook.Namespace
@@ -169,7 +111,6 @@ Sub CountEmailsBySubjectGroup_Excel()
                     subject = item.Subject
                     Dim emailCounted As Boolean
                     emailCounted = False
-                    ' Check subject against each group criteria
                     For i = 0 To UBound(groupNames)
                         For j = LBound(groupCriteria(i)) To UBound(groupCriteria(i))
                             If InStr(1, subject, groupCriteria(i)(j), vbTextCompare) > 0 Then
@@ -179,7 +120,6 @@ Sub CountEmailsBySubjectGroup_Excel()
                             End If
                         Next j
                     Next i
-                    ' If email did not match any group, record it on the Not Counted sheet
                     If Not emailCounted Then
                         xlWsNotCounted.Cells(notCountedRow, 1).Value = folderName
                         xlWsNotCounted.Cells(notCountedRow, 2).Value = subject
