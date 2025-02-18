@@ -23,7 +23,7 @@ Sub CreateYearlyFolderStructure()
     
     Set ns = Application.Session
     
-    ' Prompt the user to select the target inbox
+    ' Prompt the user to select the target inbox (this could be your primary inbox or a shared mailbox)
     Set TargetInbox = ns.PickFolder
     If TargetInbox Is Nothing Then
         MsgBox "No folder selected. Exiting.", vbExclamation
@@ -44,7 +44,7 @@ Sub CreateYearlyFolderStructure()
     Set ParentFolder = ArchiveFolder.Folders("2025")
     On Error GoTo 0
     If ParentFolder Is Nothing Then
-        Set ParentFolder = ArchiveFolder.Folders.Add("2025", olFolder)
+        Set ParentFolder = ArchiveFolder.Folders.Add("2025")
     End If
     
     ' Loop through each month (January to December)
@@ -57,7 +57,7 @@ Sub CreateYearlyFolderStructure()
         Set MonthFolder = ParentFolder.Folders(FolderName)
         On Error GoTo 0
         If MonthFolder Is Nothing Then
-            Set MonthFolder = ParentFolder.Folders.Add(FolderName, olFolder)
+            Set MonthFolder = ParentFolder.Folders.Add(FolderName)
         End If
         
         ' Set start and end dates for the month
@@ -81,10 +81,10 @@ Sub CreateYearlyFolderStructure()
                 Set DayFolder = MonthFolder.Folders(DayStr)
                 On Error GoTo 0
                 If DayFolder Is Nothing Then
-                    Set DayFolder = MonthFolder.Folders.Add(DayStr, olFolder)
+                    Set DayFolder = MonthFolder.Folders.Add(DayStr)
                 End If
                 
-                ' If this is the last business day, add the subfolders
+                ' If this day is the last business day, add the subfolders
                 If CurrentDate = LastBusinessDay Then
                     ' Use the already created day folder as the last business day folder
                     Set LastBusinessDayFolder = DayFolder
@@ -94,7 +94,7 @@ Sub CreateYearlyFolderStructure()
                         On Error GoTo 0
                         If SubFolder Is Nothing Then
                             On Error Resume Next
-                            Set SubFolder = LastBusinessDayFolder.Folders.Add(SubFolderNames(j), olFolder)
+                            Set SubFolder = LastBusinessDayFolder.Folders.Add(SubFolderNames(j))
                             If Err.Number <> 0 Then
                                 MsgBox "Error " & Err.Number & ": " & Err.Description & vbCrLf & _
                                     "While adding subfolder: " & SubFolderNames(j) & " in folder " & LastBusinessDayFolder.Name, vbCritical
