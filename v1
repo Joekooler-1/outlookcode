@@ -1,6 +1,6 @@
 Option Explicit
 
-Sub PreviewAndCreateYearlyFolderStructure()
+Sub CreateYearlyFolderStructure()
     Dim ns As Outlook.NameSpace
     Dim TargetInbox As Outlook.MAPIFolder
     Dim ArchiveFolder As Outlook.MAPIFolder
@@ -15,9 +15,6 @@ Sub PreviewAndCreateYearlyFolderStructure()
     Dim FolderName As String
     Dim SubFolderNames As Variant
     Dim j As Integer
-    Dim previewMsg As String
-    Dim hasChanges As Boolean
-    Dim response As VbMsgBoxResult
 
     ' List of subfolders for the last business day
     SubFolderNames = Array("0 FX London", "1 FX Toronto", "2 GEDA GELP", "3 FX Options", _
@@ -50,96 +47,64 @@ Sub PreviewAndCreateYearlyFolderStructure()
         Set ParentFolder = ArchiveFolder.Folders.Add("2025", olFolder)
     End If
 
-    previewMsg = "The following changes will be made:" & vbCrLf & String(50, "-") & vbCrLf
-    hasChanges = False
-
     ' Loop through all months (January to December)
     For i = 1 To 12
         MonthStr = Format(i, "00")
         FolderName = "2025." & MonthStr
         
-        ' Check if the month folder exists
+        ' Find or create month folder
         On Error Resume Next
         Set MonthFolder = ParentFolder.Folders(FolderName)
         On Error GoTo 0
         If MonthFolder Is Nothing Then
-            previewMsg = previewMsg & "- Create month folder: " & FolderName & vbCrLf
-            hasChanges = True
+            Set MonthFolder = ParentFolder.Folders.Add(FolderName, olFolder)
         End If
-        
+
         ' Determine start and end dates for the month
         StartDate = DateSerial(2025, i, 1)
         EndDate = DateSerial(2025, i + 1, 0)
-        
-        ' Determine last business day of the month
+
+        ' Find last business day of the month
         LastBusinessDay = EndDate
         Do While Weekday(LastBusinessDay, vbMonday) > 5
             LastBusinessDay = LastBusinessDay - 1
         Loop
-        
+
         ' Loop through each day in the month
         CurrentDate = StartDate
         Do While CurrentDate <= EndDate
             If Weekday(CurrentDate, vbMonday) <= 5 Then  ' Only business days (Mon-Fri)
                 DayStr = "2025." & MonthStr & "." & Format(Day(CurrentDate), "00")
+
+                ' Find or create business day folder
                 On Error Resume Next
                 Set DayFolder = MonthFolder.Folders(DayStr)
                 On Error GoTo 0
                 If DayFolder Is Nothing Then
-                    previewMsg = previewMsg & "- Create business day folder: " & DayStr & vbCrLf
-                    hasChanges = True
+                    Set DayFolder = MonthFolder.Folders.Add(DayStr, olFolder)
                 End If
-                
-                ' If this day is the last business day, check subfolders
+
+                ' If this is the last business day, ensure subfolders are created
                 If CurrentDate = LastBusinessDay Then
                     On Error Resume Next
                     Set LastBusinessDayFolder = MonthFolder.Folders(DayStr)
                     On Error GoTo 0
-                    If Not LastBusinessDayFolder Is Nothing Then
-                        ' Check for missing subfolders
-                        For j = LBound(SubFolderNames) To UBound(SubFolderNames)
-                            On Error Resume Next
-                            Set SubFolder = LastBusinessDayFolder.Folders(SubFolderNames(j))
-                            On Error GoTo 0
-                            If SubFolder Is Nothing Then
-                                previewMsg = previewMsg & "  - Add subfolder: " & SubFolderNames(j) & " inside " & DayStr & vbCrLf
-                                hasChanges = True
-                            End If
-                        Next j
-                    Else
-                        ' Last business day folder does not exist yet; it will be created
-                        previewMsg = previewMsg & "- Create last business day folder: " & DayStr & vbCrLf
-                        hasChanges = True
-                        For j = LBound(SubFolderNames) To UBound(SubFolderNames)
-                            previewMsg = previewMsg & "  - Add subfolder: " & SubFolderNames(j) & " inside " & DayStr & vbCrLf
-                        Next j
+                    If LastBusinessDayFolder Is Nothing Then
+                        Set LastBusinessDayFolder = MonthFolder.Folders.Add(DayStr, olFolder)
                     End If
+                    For j = LBound(SubFolderNames) To UBound(SubFolderNames)
+                        On Error Resume Next
+                        Set SubFolder = LastBusinessDayFolder.Folders(SubFolderNames(j))
+                        On Error GoTo 0
+                        If SubFolder Is Nothing Then
+                            Set SubFolder = LastBusinessDayFolder.Folders.Add(SubFolderNames(j), olFolder)
+                        End If
+                    Next j
                 End If
             End If
             CurrentDate = CurrentDate + 1
         Loop
     Next i
 
-    ' If no changes are detected, inform the user and exit
-    If Not hasChanges Then
-        MsgBox "All required folders already exist. No changes needed.", vbInformation
-        Exit Sub
-    End If
-
-    ' Display preview and ask for confirmation
-    response = MsgBox(previewMsg & vbCrLf & "Do you want to proceed?", vbYesNo + vbQuestion, "Preview Changes")
-    If response = vbNo Then
-        MsgBox "Operation cancelled.", vbInformation
-        Exit Sub
-    End If
-
-    ' If confirmed, create the folders
-    CreateFolders TargetInbox
-End Sub
-
-Sub CreateFolders(TargetInbox As Outlook.MAPIFolder)
-    Dim ns As Outlook.NameSpace
-    Set ns = Application.Session
-    ' Calls the original function to re-run the creation process after confirmation
-    PreviewAndCreateYearlyFolderStructure
+    MsgBox "Folders created successfully in 'Archive - Valuation Reports' inside " & TargetInbox.Name & "!", vbInformation
 End Sub
