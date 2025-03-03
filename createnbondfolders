@@ -1,0 +1,39 @@
+Sub CreateBondsFolders()
+    Dim ns As Outlook.Namespace
+    Dim parentFolder As Outlook.MAPIFolder
+    Dim newFolder As Outlook.MAPIFolder
+    Dim folderName As String
+    Dim i As Integer
+    
+    ' Get MAPI namespace
+    Set ns = Application.GetNamespace("MAPI")
+    
+    ' Prompt the user to select the parent folder
+    Set parentFolder = ns.PickFolder
+    If parentFolder Is Nothing Then
+        MsgBox "No folder selected. Exiting macro."
+        Exit Sub
+    End If
+    
+    ' Loop through ASCII codes for A to Z and create each folder
+    For i = 65 To 90  ' 65 = "A", 90 = "Z"
+        folderName = "Bonds_" & Chr(i)
+        On Error Resume Next  ' In case the folder already exists
+        Set newFolder = parentFolder.Folders(folderName)
+        If newFolder Is Nothing Then
+            parentFolder.Folders.Add folderName
+        End If
+        On Error GoTo 0
+    Next i
+    
+    ' Create the Bonds_00 folder
+    folderName = "Bonds_00"
+    On Error Resume Next
+    Set newFolder = parentFolder.Folders(folderName)
+    If newFolder Is Nothing Then
+        parentFolder.Folders.Add folderName
+    End If
+    On Error GoTo 0
+    
+    MsgBox "Folders created successfully!"
+End Sub
