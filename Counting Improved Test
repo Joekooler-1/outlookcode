@@ -15,9 +15,11 @@ Option Explicit
 '           "0 FX London", "1 FX Toronto", "2 GEDA GELP", "3 FX Options", _
 '           "4 Structured Credit", "5 Structured Rates", "6 Bonds", _
 '           "7 Commodities", "8 London IRS", "9 Toronto IRS", "9.1 CDS"
+'      - Finally, a sum line is added at the bottom that totals each column and provides a grand total.
 '********************************************************************
 
 ' --- Group Check Functions ---
+
 Function IsLFX(subject As String) As Boolean
     IsLFX = (InStr(1, subject, "LFX", vbTextCompare) > 0 Or _
              InStr(1, subject, "RBCBK_BLK_DERIV", vbTextCompare) > 0)
@@ -30,6 +32,7 @@ End Function
 Function IsGEDA(subject As String) As Boolean
     IsGEDA = (InStr(1, subject, "ELN", vbTextCompare) > 0 Or _
               InStr(1, subject, "All_EQD", vbTextCompare) > 0 Or _
+              InStr(1, subject, "_EQD", vbTextCompare) > 0 Or _
               InStr(1, subject, "_Structured Deposits", vbTextCompare) > 0 Or _
               InStr(1, subject, "Delta 1", vbTextCompare) > 0 Or _
               InStr(1, subject, "Delta_One", vbTextCompare) > 0 Or _
@@ -66,7 +69,8 @@ Function IsCommods(subject As String) As Boolean
 End Function
 
 Function IsLRS(subject As String) As Boolean
-    IsLRS = (InStr(1, subject, "IRS", vbTextCompare) > 0)
+    IsLRS = (InStr(1, subject, "IRS", vbTextCompare) > 0) And _
+            (InStr(1, subject, "Tor_IRS", vbTextCompare) = 0)
 End Function
 
 Function IsTIRS(subject As String) As Boolean
@@ -74,6 +78,7 @@ Function IsTIRS(subject As String) As Boolean
 End Function
 
 ' --- Main Routine ---
+
 Sub CountEmailsBySubjectGroup_NoArrays()
     Dim olApp As Object, ns As Object
     Dim MonthFolder As Object, DayFolder As Object
@@ -136,6 +141,7 @@ Sub CountEmailsBySubjectGroup_NoArrays()
     xlWsSummary.Cells(1, 10).Value = "COMMODS"
     xlWsSummary.Cells(1, 11).Value = "LRS"
     xlWsSummary.Cells(1, 12).Value = "TIRS"
+    xlWsSummary.Cells(1, 13).Value = "Grand Total"
     rowIndex = 2
     
     ' Create the Not Counted worksheet
@@ -231,6 +237,9 @@ Sub CountEmailsBySubjectGroup_NoArrays()
             xlWsSummary.Cells(rowIndex, 10).Value = countCommods
             xlWsSummary.Cells(rowIndex, 11).Value = countLRS
             xlWsSummary.Cells(rowIndex, 12).Value = countTIRS
+            xlWsSummary.Cells(rowIndex, 13).Value = countLFX + countTFX + countGEDA + countFXO + _
+                                                      countSRCredit + countNotes + countBonds + _
+                                                      countCDS + countCommods + countLRS + countTIRS
             rowIndex = rowIndex + 1
         End If
 NextDay:
@@ -284,9 +293,27 @@ NextDay:
         xlWsSummary.Cells(rowIndex, 10).Value = countCommods
         xlWsSummary.Cells(rowIndex, 11).Value = countLRS
         xlWsSummary.Cells(rowIndex, 12).Value = countTIRS
+        xlWsSummary.Cells(rowIndex, 13).Value = countLFX + countTFX + countGEDA + countFXO + _
+                                                  countSRCredit + countNotes + countBonds + _
+                                                  countCDS + countCommods + countLRS + countTIRS
         rowIndex = rowIndex + 1
     End If
     
+    ' --- Add a sum line at the bottom of the Summary worksheet ---
+    Dim totalRow As Long
+    Dim grandTotal As Long, colSum As Long
+    Dim col As Long
+    totalRow = rowIndex
+    xlWsSummary.Cells(totalRow, 1).Value = "Total"
+    grandTotal = 0
+    For col = 2 To 12
+        colSum = Application.WorksheetFunction.Sum(xlWsSummary.Range(xlWsSummary.Cells(2, col), xlWsSummary.Cells(totalRow - 1, col)))
+        xlWsSummary.Cells(totalRow, col).Value = colSum
+        grandTotal = grandTotal + colSum
+    Next col
+    xlWsSummary.Cells(totalRow, 13).Value = grandTotal
+    
     MsgBox "Email counts by subject group have been output to Excel." & vbCrLf & _
-           "For the last day folder, counts were taken from its subfolders.", vbInformation
+           "For the last day folder, counts were taken from its subfolders." & vbCrLf & _
+           "A sum line has been added at the bottom.", vbInformation
 End Sub
