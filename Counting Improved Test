@@ -1,0 +1,292 @@
+Option Explicit
+
+'********************************************************************
+' Steps to Use:
+' 1. Open Excel.
+' 2. Press ALT+F11 to open the VBA Editor.
+' 3. Insert a new module (Insert → Module).
+' 4. Copy and paste the entire code below into the module.
+' 5. Press ALT+F8, select "CountEmailsBySubjectGroup_NoArrays", and click "Run".
+' 6. When prompted, select the Month folder (e.g. "2026.01") that contains your day folders.
+' 7. The macro will process each day folder (except the one with the maximum date) and output:
+'      - A "Summary" worksheet listing each day folder (date) and the counts for each group.
+'      - A "Not Counted" worksheet listing the folder and subject of emails that did not match any group.
+'      - For the last day folder, the counts are taken from its subfolders:
+'           "0 FX London", "1 FX Toronto", "2 GEDA GELP", "3 FX Options", _
+'           "4 Structured Credit", "5 Structured Rates", "6 Bonds", _
+'           "7 Commodities", "8 London IRS", "9 Toronto IRS", "9.1 CDS"
+'********************************************************************
+
+' --- Group Check Functions ---
+Function IsLFX(subject As String) As Boolean
+    IsLFX = (InStr(1, subject, "LFX", vbTextCompare) > 0 Or _
+             InStr(1, subject, "RBCBK_BLK_DERIV", vbTextCompare) > 0)
+End Function
+
+Function IsTFX(subject As String) As Boolean
+    IsTFX = (InStr(1, subject, "TFX", vbTextCompare) > 0)
+End Function
+
+Function IsGEDA(subject As String) As Boolean
+    IsGEDA = (InStr(1, subject, "ELN", vbTextCompare) > 0 Or _
+              InStr(1, subject, "All_EQD", vbTextCompare) > 0 Or _
+              InStr(1, subject, "_Structured Deposits", vbTextCompare) > 0 Or _
+              InStr(1, subject, "Delta 1", vbTextCompare) > 0 Or _
+              InStr(1, subject, "Delta_One", vbTextCompare) > 0 Or _
+              InStr(1, subject, "_Global_One", vbTextCompare) > 0 Or _
+              InStr(1, subject, "_Variance_Swap", vbTextCompare) > 0 Or _
+              InStr(1, subject, "Structured Equity Note", vbTextCompare) > 0)
+End Function
+
+Function IsFXO(subject As String) As Boolean
+    IsFXO = (InStr(1, subject, "FXO", vbTextCompare) > 0)
+End Function
+
+Function IsSRCredit(subject As String) As Boolean
+    IsSRCredit = (InStr(1, subject, "NOTES DAILY Kepler", vbTextCompare) > 0 Or _
+                  InStr(1, subject, "DAILY Pictet", vbTextCompare) > 0)
+End Function
+
+Function IsNotes(subject As String) As Boolean
+    IsNotes = (InStr(1, subject, ": NOTES ", vbTextCompare) > 0)
+End Function
+
+Function IsBonds(subject As String) As Boolean
+    IsBonds = (InStr(1, subject, "_Bonds", vbTextCompare) > 0)
+End Function
+
+Function IsCDS(subject As String) As Boolean
+    IsCDS = (InStr(1, subject, "_CDS", vbTextCompare) > 0)
+End Function
+
+Function IsCommods(subject As String) As Boolean
+    IsCommods = (InStr(1, subject, " _COMMODITIES", vbTextCompare) > 0 Or _
+                 InStr(1, subject, "_COMMODITY", vbTextCompare) > 0 Or _
+                 InStr(1, subject, " - MTM REPORT", vbTextCompare) > 0)
+End Function
+
+Function IsLRS(subject As String) As Boolean
+    IsLRS = (InStr(1, subject, "IRS", vbTextCompare) > 0)
+End Function
+
+Function IsTIRS(subject As String) As Boolean
+    IsTIRS = (InStr(1, subject, "Tor_IRS", vbTextCompare) > 0)
+End Function
+
+' --- Main Routine ---
+Sub CountEmailsBySubjectGroup_NoArrays()
+    Dim olApp As Object, ns As Object
+    Dim MonthFolder As Object, DayFolder As Object
+    Dim item As Object, subject As String
+    Dim countLFX As Long, countTFX As Long, countGEDA As Long, countFXO As Long
+    Dim countSRCredit As Long, countNotes As Long, countBonds As Long, countCDS As Long
+    Dim countCommods As Long, countLRS As Long, countTIRS As Long
+    Dim xlApp As Excel.Application, xlWb As Excel.Workbook
+    Dim xlWsSummary As Excel.Worksheet, xlWsNotCounted As Excel.Worksheet
+    Dim rowIndex As Long, notCountedRow As Long
+    Dim folderName As String
+    Dim maxDate As Date, folderDate As Date, tempDate As Date
+    Dim emailCounted As Boolean
+    Dim lastDayFolder As Object
+    
+    ' Create Outlook instance (late binding)
+    On Error Resume Next
+    Set olApp = GetObject(, "Outlook.Application")
+    If olApp Is Nothing Then Set olApp = CreateObject("Outlook.Application")
+    On Error GoTo 0
+    Set ns = olApp.GetNamespace("MAPI")
+    
+    ' Prompt user to select the Month folder (should contain day folders "YYYY.MM.DD")
+    Set MonthFolder = ns.PickFolder
+    If MonthFolder Is Nothing Then
+        MsgBox "No folder selected. Exiting.", vbExclamation
+        Exit Sub
+    End If
+    
+    ' Determine the maximum date (i.e. the last day folder) by looping through subfolders
+    maxDate = 0
+    For Each DayFolder In MonthFolder.Folders
+        folderName = DayFolder.Name
+        If Len(folderName) = 10 Then
+            On Error Resume Next
+            tempDate = CDate(Replace(folderName, ".", "/"))
+            On Error GoTo 0
+            If tempDate > maxDate Then
+                maxDate = tempDate
+                Set lastDayFolder = DayFolder
+            End If
+        End If
+    Next DayFolder
+    
+    ' Create a new Excel workbook for output
+    Set xlApp = Application
+    Set xlWb = xlApp.Workbooks.Add
+    ' Create the Summary worksheet
+    Set xlWsSummary = xlWb.Worksheets(1)
+    xlWsSummary.Name = "Summary"
+    xlWsSummary.Cells(1, 1).Value = "Date"
+    xlWsSummary.Cells(1, 2).Value = "LFX"
+    xlWsSummary.Cells(1, 3).Value = "TFX"
+    xlWsSummary.Cells(1, 4).Value = "GEDA"
+    xlWsSummary.Cells(1, 5).Value = "FXO"
+    xlWsSummary.Cells(1, 6).Value = "SR CREDIT"
+    xlWsSummary.Cells(1, 7).Value = "NOTES"
+    xlWsSummary.Cells(1, 8).Value = "BONDS"
+    xlWsSummary.Cells(1, 9).Value = "CDS"
+    xlWsSummary.Cells(1, 10).Value = "COMMODS"
+    xlWsSummary.Cells(1, 11).Value = "LRS"
+    xlWsSummary.Cells(1, 12).Value = "TIRS"
+    rowIndex = 2
+    
+    ' Create the Not Counted worksheet
+    Set xlWsNotCounted = xlWb.Worksheets.Add(After:=xlWb.Worksheets(xlWb.Worksheets.Count))
+    xlWsNotCounted.Name = "Not Counted"
+    xlWsNotCounted.Cells(1, 1).Value = "Folder"
+    xlWsNotCounted.Cells(1, 2).Value = "Subject"
+    notCountedRow = 2
+    
+    ' Loop through each day folder in the selected Month folder (skip the last day folder)
+    For Each DayFolder In MonthFolder.Folders
+        folderName = DayFolder.Name
+        If Len(folderName) = 10 Then
+            On Error Resume Next
+            folderDate = CDate(Replace(folderName, ".", "/"))
+            On Error GoTo 0
+            
+            ' Skip the folder if it is the last day folder
+            If folderDate = maxDate Then GoTo NextDay
+            
+            ' Initialize counts for this day
+            countLFX = 0: countTFX = 0: countGEDA = 0: countFXO = 0
+            countSRCredit = 0: countNotes = 0: countBonds = 0: countCDS = 0
+            countCommods = 0: countLRS = 0: countTIRS = 0
+            
+            ' Loop through each mail item in the day folder
+            For Each item In DayFolder.Items
+                If item.Class = 43 Then  ' Process only Mail Items
+                    subject = item.Subject
+                    emailCounted = False
+                    If IsLFX(subject) Then
+                        countLFX = countLFX + 1
+                        emailCounted = True
+                    End If
+                    If IsTFX(subject) Then
+                        countTFX = countTFX + 1
+                        emailCounted = True
+                    End If
+                    If IsGEDA(subject) Then
+                        countGEDA = countGEDA + 1
+                        emailCounted = True
+                    End If
+                    If IsFXO(subject) Then
+                        countFXO = countFXO + 1
+                        emailCounted = True
+                    End If
+                    If IsSRCredit(subject) Then
+                        countSRCredit = countSRCredit + 1
+                        emailCounted = True
+                    End If
+                    If IsNotes(subject) Then
+                        countNotes = countNotes + 1
+                        emailCounted = True
+                    End If
+                    If IsBonds(subject) Then
+                        countBonds = countBonds + 1
+                        emailCounted = True
+                    End If
+                    If IsCDS(subject) Then
+                        countCDS = countCDS + 1
+                        emailCounted = True
+                    End If
+                    If IsCommods(subject) Then
+                        countCommods = countCommods + 1
+                        emailCounted = True
+                    End If
+                    If IsLRS(subject) Then
+                        countLRS = countLRS + 1
+                        emailCounted = True
+                    End If
+                    If IsTIRS(subject) Then
+                        countTIRS = countTIRS + 1
+                        emailCounted = True
+                    End If
+                    If Not emailCounted Then
+                        xlWsNotCounted.Cells(notCountedRow, 1).Value = folderName
+                        xlWsNotCounted.Cells(notCountedRow, 2).Value = subject
+                        notCountedRow = notCountedRow + 1
+                    End If
+                End If
+            Next item
+            
+            ' Output the counts for this day
+            xlWsSummary.Cells(rowIndex, 1).Value = folderName
+            xlWsSummary.Cells(rowIndex, 2).Value = countLFX
+            xlWsSummary.Cells(rowIndex, 3).Value = countTFX
+            xlWsSummary.Cells(rowIndex, 4).Value = countGEDA
+            xlWsSummary.Cells(rowIndex, 5).Value = countFXO
+            xlWsSummary.Cells(rowIndex, 6).Value = countSRCredit
+            xlWsSummary.Cells(rowIndex, 7).Value = countNotes
+            xlWsSummary.Cells(rowIndex, 8).Value = countBonds
+            xlWsSummary.Cells(rowIndex, 9).Value = countCDS
+            xlWsSummary.Cells(rowIndex, 10).Value = countCommods
+            xlWsSummary.Cells(rowIndex, 11).Value = countLRS
+            xlWsSummary.Cells(rowIndex, 12).Value = countTIRS
+            rowIndex = rowIndex + 1
+        End If
+NextDay:
+    Next DayFolder
+    
+    ' --- Process the last day folder using its subfolders ---
+    If Not lastDayFolder Is Nothing Then
+        ' Initialize counts for the last day folder's subfolders
+        countLFX = 0: countTFX = 0: countGEDA = 0: countFXO = 0
+        countSRCredit = 0: countNotes = 0: countBonds = 0: countCDS = 0
+        countCommods = 0: countLRS = 0: countTIRS = 0
+        
+        Dim subFolder As Object
+        For Each subFolder In lastDayFolder.Folders
+            Select Case subFolder.Name
+                Case "0 FX London"
+                    countLFX = subFolder.Items.Count
+                Case "1 FX Toronto"
+                    countTFX = subFolder.Items.Count
+                Case "2 GEDA GELP"
+                    countGEDA = subFolder.Items.Count
+                Case "3 FX Options"
+                    countFXO = subFolder.Items.Count
+                Case "4 Structured Credit"
+                    countSRCredit = subFolder.Items.Count
+                Case "5 Structured Rates"
+                    countNotes = subFolder.Items.Count
+                Case "6 Bonds"
+                    countBonds = subFolder.Items.Count
+                Case "7 Commodities"
+                    countCommods = subFolder.Items.Count
+                Case "8 London IRS"
+                    countLRS = subFolder.Items.Count
+                Case "9 Toronto IRS"
+                    countTIRS = subFolder.Items.Count
+                Case "9.1 CDS"
+                    countCDS = subFolder.Items.Count
+            End Select
+        Next subFolder
+        
+        ' Output the counts for the last day folder
+        xlWsSummary.Cells(rowIndex, 1).Value = lastDayFolder.Name
+        xlWsSummary.Cells(rowIndex, 2).Value = countLFX
+        xlWsSummary.Cells(rowIndex, 3).Value = countTFX
+        xlWsSummary.Cells(rowIndex, 4).Value = countGEDA
+        xlWsSummary.Cells(rowIndex, 5).Value = countFXO
+        xlWsSummary.Cells(rowIndex, 6).Value = countSRCredit
+        xlWsSummary.Cells(rowIndex, 7).Value = countNotes
+        xlWsSummary.Cells(rowIndex, 8).Value = countBonds
+        xlWsSummary.Cells(rowIndex, 9).Value = countCDS
+        xlWsSummary.Cells(rowIndex, 10).Value = countCommods
+        xlWsSummary.Cells(rowIndex, 11).Value = countLRS
+        xlWsSummary.Cells(rowIndex, 12).Value = countTIRS
+        rowIndex = rowIndex + 1
+    End If
+    
+    MsgBox "Email counts by subject group have been output to Excel." & vbCrLf & _
+           "For the last day folder, counts were taken from its subfolders.", vbInformation
+End Sub
